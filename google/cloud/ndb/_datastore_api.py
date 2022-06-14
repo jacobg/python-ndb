@@ -20,8 +20,7 @@ import logging
 
 from google.api_core import exceptions as core_exceptions
 from google.cloud.datastore import helpers
-from google.cloud.datastore_v1.proto import datastore_pb2
-from google.cloud.datastore_v1.proto import entity_pb2
+from google.cloud.datastore_v1 import types as ds_types
 
 from google.cloud.ndb import context as context_module
 from google.cloud.ndb import _batch
@@ -33,9 +32,9 @@ from google.cloud.ndb import _retry
 from google.cloud.ndb import tasklets
 from google.cloud.ndb import utils
 
-EVENTUAL = datastore_pb2.ReadOptions.EVENTUAL
+EVENTUAL = ds_types.ReadOptions.ReadConsistency.EVENTUAL
 EVENTUAL_CONSISTENCY = EVENTUAL  # Legacy NDB
-STRONG = datastore_pb2.ReadOptions.STRONG
+STRONG = ds_types.ReadOptions.ReadConsistency.STRONG
 
 _DEFAULT_TIMEOUT = None
 _NOT_FOUND = object()
@@ -143,8 +142,8 @@ def lookup(key, options):
         key_locked = _cache.is_locked_value(result)
         if not key_locked:
             if result:
-                entity_pb = entity_pb2.Entity()
-                entity_pb.MergeFromString(result)
+                entity_pb = ds_types.Entity()
+                entity_pb._pb.MergeFromString(result)
 
             elif use_datastore:
                 lock = yield _cache.global_lock_for_read(cache_key, result)
@@ -165,7 +164,7 @@ def lookup(key, options):
         if use_global_cache and not key_locked:
             if entity_pb is not _NOT_FOUND:
                 expires = context._global_cache_timeout(key, options)
-                serialized = entity_pb.SerializeToString()
+                serialized = entity_pb._pb.SerializeToString()
                 yield _cache.global_compare_and_swap(
                     cache_key, serialized, expires=expires
                 )
@@ -211,7 +210,7 @@ class _LookupBatch(object):
         Returns:
             tasklets.Future: A future for the eventual result.
         """
-        todo_key = key.to_protobuf().SerializeToString()
+        todo_key = key.to_protobuf()._pb.SerializeToString()
         future = tasklets.Future(info="Lookup({})".format(key))
         self.todo.setdefault(todo_key, []).append(future)
         return future
@@ -220,8 +219,8 @@ class _LookupBatch(object):
         """Perform a Datastore Lookup on all batched Lookup requests."""
         keys = []
         for todo_key in self.todo.keys():
-            key_pb = entity_pb2.Key()
-            key_pb.ParseFromString(todo_key)
+            key_pb = ds_types.Key()
+            key_pb._pb.ParseFromString(todo_key)
             keys.append(key_pb)
 
         read_options = get_read_options(self.options)
@@ -264,20 +263,20 @@ class _LookupBatch(object):
         if results.deferred:
             next_batch = _batch.get_batch(type(self), self.options)
             for key in results.deferred:
-                todo_key = key.SerializeToString()
+                todo_key = key._pb.SerializeToString()
                 next_batch.todo.setdefault(todo_key, []).extend(self.todo[todo_key])
 
         # For all missing keys, set result to _NOT_FOUND and let callers decide
         # how to handle
         for result in results.missing:
-            todo_key = result.entity.key.SerializeToString()
+            todo_key = result.entity.key._pb.SerializeToString()
             for future in self.todo[todo_key]:
                 future.set_result(_NOT_FOUND)
 
         # For all found entities, set the result on their corresponding futures
         for result in results.found:
             entity = result.entity
-            todo_key = entity.key.SerializeToString()
+            todo_key = entity.key._pb.SerializeToString()
             for future in self.todo[todo_key]:
                 future.set_result(entity)
 
@@ -288,9 +287,9 @@ def _datastore_lookup(keys, read_options, retries=None, timeout=None):
     Args:
         keys (Iterable[entity_pb2.Key]): The entity keys to
             look up.
-        read_options (Union[datastore_pb2.ReadOptions, NoneType]): Options for
+        read_options (Union[ds_types.ReadOptions, NoneType]): Options for
             the request.
-        retries (int): Number of times to potentially retry the call. If
+        retry (int): Number of times to potentially retry the call. If
             :data:`None` is passed, will use :data:`_retry._DEFAULT_RETRIES`.
             If :data:`0` is passed, the call is attempted only once.
         timeout (float): Timeout, in seconds, to pass to gRPC call. If
@@ -300,13 +299,13 @@ def _datastore_lookup(keys, read_options, retries=None, timeout=None):
         tasklets.Future: Future object for eventual result of lookup.
     """
     client = context_module.get_context().client
-    request = datastore_pb2.LookupRequest(
+    request = ds_types.LookupRequest(
         project_id=client.project,
         keys=[key for key in keys],
         read_options=read_options,
     )
 
-    return make_call("Lookup", request, retries=retries, timeout=timeout)
+    return make_call("lookup", request, retries=retries, timeout=timeout)
 
 
 def get_read_options(options, default_read_consistency=None):
@@ -315,13 +314,13 @@ def get_read_options(options, default_read_consistency=None):
     Args:
         options (_options.ReadOptions): The options for the request. May
             contain options unrelated to creating a
-            :class:`datastore_pb2.ReadOptions` instance, which will be ignored.
+            :class:`ds_types.ReadOptions` instance, which will be ignored.
         default_read_consistency: Use this value for ``read_consistency`` if
             neither ``transaction`` nor ``read_consistency`` are otherwise
             specified.
 
     Returns:
-        datastore_pb2.ReadOptions: The options instance for passing to the
+        ds_types.ReadOptions: The options instance for passing to the
             Datastore gRPC API.
 
     Raises:
@@ -338,7 +337,7 @@ def get_read_options(options, default_read_consistency=None):
     elif read_consistency is EVENTUAL:
         raise ValueError("read_consistency must not be EVENTUAL when in transaction")
 
-    return datastore_pb2.ReadOptions(
+    return ds_types.ReadOptions(
         read_consistency=read_consistency, transaction=transaction
     )
 
@@ -375,7 +374,7 @@ def put(entity, options):
             lock = yield _cache.global_lock_for_write(cache_key)
         else:
             expires = context._global_cache_timeout(entity.key, options)
-            cache_value = entity_pb.SerializeToString()
+            cache_value = entity_pb._pb.SerializeToString()
             yield _cache.global_set(cache_key, cache_value, expires=expires)
 
     if use_datastore:
@@ -459,7 +458,7 @@ class _NonTransactionalCommitBatch(object):
 
     Attributes:
         options (_options.Options): See Args.
-        mutations (List[datastore_pb2.Mutation]): Sequence of mutation protocol
+        mutations (List[ds_types.Mutation]): Sequence of mutation protocol
             buffers accumumlated for this batch.
         futures (List[tasklets.Future]): Sequence of futures for return results
             of the commit. The i-th element of ``futures`` corresponds to the
@@ -495,7 +494,7 @@ class _NonTransactionalCommitBatch(object):
                 (entity_pb2.Key) for the entity.
         """
         future = tasklets.Future(info="put({})".format(entity_pb))
-        mutation = datastore_pb2.Mutation(upsert=entity_pb)
+        mutation = ds_types.Mutation(upsert=entity_pb)
         self.mutations.append(mutation)
         self.futures.append(future)
         return future
@@ -511,7 +510,7 @@ class _NonTransactionalCommitBatch(object):
         """
         key_pb = key.to_protobuf()
         future = tasklets.Future(info="delete({})".format(key_pb))
-        mutation = datastore_pb2.Mutation(delete=key_pb)
+        mutation = ds_types.Mutation(delete=key_pb)
         self.mutations.append(mutation)
         self.futures.append(future)
         return future
@@ -600,7 +599,7 @@ class _TransactionalCommitBatch(_NonTransactionalCommitBatch):
 
     Attributes:
         options (_options.Options): See Args.
-        mutations (List[datastore_pb2.Mutation]): Sequence of mutation protocol
+        mutations (List[ds_types.Mutation]): Sequence of mutation protocol
             buffers accumumlated for this batch.
         futures (List[tasklets.Future]): Sequence of futures for return results
             of the commit. The i-th element of ``futures`` corresponds to the
@@ -609,7 +608,7 @@ class _TransactionalCommitBatch(_NonTransactionalCommitBatch):
             commit.
         allocating_ids (List[tasklets.Future]): Futures for any calls to
             AllocateIds that are fired off before commit.
-        incomplete_mutations (List[datastore_pb2.Mutation]): List of mutations
+        incomplete_mutations (List[ds_types.Mutation]): List of mutations
             with keys which will need ids allocated. Incomplete keys will be
             allocated by an idle callback. Any keys still incomplete at commit
             time will be allocated by the call to Commit. Only used when in a
@@ -645,7 +644,7 @@ class _TransactionalCommitBatch(_NonTransactionalCommitBatch):
         """
         future = tasklets.Future("put({})".format(entity_pb))
         self.futures.append(future)
-        mutation = datastore_pb2.Mutation(upsert=entity_pb)
+        mutation = ds_types.Mutation(upsert=entity_pb)
         self.mutations.append(mutation)
 
         # If we have an incomplete key, add the incomplete key to a batch for a
@@ -725,7 +724,7 @@ class _TransactionalCommitBatch(_NonTransactionalCommitBatch):
         # Update mutations with complete keys
         response = rpc.result()
         for mutation, key, future in zip(mutations, response.keys, futures):
-            mutation.upsert.key.CopyFrom(key)
+            mutation.upsert.key._pb.CopyFrom(key._pb)
             future.set_result(key)
 
     @tasklets.tasklet
@@ -789,7 +788,7 @@ def _process_commit(rpc, futures):
     Args:
         rpc (tasklets.Tasklet): If not an exception, the result will be an
             instance of
-            :class:`google.cloud.datastore_v1.datastore_pb2.CommitResponse`
+            :class:`google.cloud.datastore_v1.ds_types.CommitResponse`
         futures (List[tasklets.Future]): List of futures waiting on results.
     """
     # If RPC has resulted in an exception, propagate that exception to all
@@ -847,7 +846,7 @@ def _datastore_commit(mutations, transaction, retries=None, timeout=None):
     """Call Commit on Datastore.
 
     Args:
-        mutations (List[datastore_pb2.Mutation]): The changes to persist to
+        mutations (List[ds_types.Mutation]): The changes to persist to
             Datastore.
         transaction (Union[bytes, NoneType]): The identifier for the
             transaction for this commit, or :data:`None` if no transaction is
@@ -860,22 +859,22 @@ def _datastore_commit(mutations, transaction, retries=None, timeout=None):
 
     Returns:
         tasklets.Tasklet: A future for
-            :class:`google.cloud.datastore_v1.datastore_pb2.CommitResponse`
+            :class:`google.cloud.datastore_v1.ds_types.CommitResponse`
     """
     if transaction is None:
-        mode = datastore_pb2.CommitRequest.NON_TRANSACTIONAL
+        mode = ds_types.CommitRequest.Mode.NON_TRANSACTIONAL
     else:
-        mode = datastore_pb2.CommitRequest.TRANSACTIONAL
+        mode = ds_types.CommitRequest.Mode.TRANSACTIONAL
 
     client = context_module.get_context().client
-    request = datastore_pb2.CommitRequest(
+    request = ds_types.CommitRequest(
         project_id=client.project,
         mode=mode,
         mutations=mutations,
         transaction=transaction,
     )
 
-    return make_call("Commit", request, retries=retries, timeout=timeout)
+    return make_call("commit", request, retries=retries, timeout=timeout)
 
 
 def allocate(keys, options):
@@ -990,9 +989,9 @@ def _datastore_allocate_ids(keys, retries=None, timeout=None):
             :class:`google.cloud.datastore_v1.datastore_pb2.AllocateIdsResponse`
     """
     client = context_module.get_context().client
-    request = datastore_pb2.AllocateIdsRequest(project_id=client.project, keys=keys)
+    request = ds_types.AllocateIdsRequest(project_id=client.project, keys=keys)
 
-    return make_call("AllocateIds", request, retries=retries, timeout=timeout)
+    return make_call("allocate_ids", request, retries=retries, timeout=timeout)
 
 
 @tasklets.tasklet
@@ -1036,19 +1035,19 @@ def _datastore_begin_transaction(read_only, retries=None, timeout=None):
     """
     client = context_module.get_context().client
     if read_only:
-        options = datastore_pb2.TransactionOptions(
-            read_only=datastore_pb2.TransactionOptions.ReadOnly()
+        options = ds_types.TransactionOptions(
+            read_only=ds_types.TransactionOptions.ReadOnly()
         )
     else:
-        options = datastore_pb2.TransactionOptions(
-            read_write=datastore_pb2.TransactionOptions.ReadWrite()
+        options = ds_types.TransactionOptions(
+            read_write=ds_types.TransactionOptions.ReadWrite()
         )
 
-    request = datastore_pb2.BeginTransactionRequest(
+    request = ds_types.BeginTransactionRequest(
         project_id=client.project, transaction_options=options
     )
 
-    return make_call("BeginTransaction", request, retries=retries, timeout=timeout)
+    return make_call("begin_transaction", request, retries=retries, timeout=timeout)
 
 
 @tasklets.tasklet
@@ -1085,8 +1084,8 @@ def _datastore_rollback(transaction, retries=None, timeout=None):
             :class:`google.cloud.datastore_v1.datastore_pb2.RollbackResponse`
     """
     client = context_module.get_context().client
-    request = datastore_pb2.RollbackRequest(
+    request = ds_types.RollbackRequest(
         project_id=client.project, transaction=transaction
     )
 
-    return make_call("Rollback", request, retries=retries, timeout=timeout)
+    return make_call("rollback", request, retries=retries, timeout=timeout)

@@ -23,8 +23,8 @@ from google.api_core import client_info
 from google.cloud import environment_vars
 from google.cloud import _helpers
 from google.cloud import client as google_client
-from google.cloud.datastore_v1.gapic import datastore_client
-from google.cloud.datastore_v1.proto import datastore_pb2_grpc
+from google.cloud.datastore_v1.services.datastore import client as datastore_client
+from google.cloud.datastore_v1.services.datastore.transports import grpc as datastore_grpc
 
 from google.cloud.ndb import __version__
 from google.cloud.ndb import context as context_module
@@ -35,7 +35,7 @@ _CLIENT_INFO = client_info.ClientInfo(
     user_agent="google-cloud-ndb/{}".format(__version__)
 )
 
-DATASTORE_API_HOST = datastore_client.DatastoreClient.SERVICE_ADDRESS.rsplit(":", 1)[0]
+DATASTORE_API_HOST = datastore_client.DatastoreClient.DEFAULT_ENDPOINT
 
 
 def _get_gcd_project():
@@ -121,7 +121,7 @@ class Client(google_client.ClientWithProject):
                 self._credentials, user_agent, self.host
             )
 
-        self.stub = datastore_pb2_grpc.DatastoreStub(channel)
+        self.stub = datastore_grpc.DatastoreGrpcTransport(channel=channel)
 
     @contextlib.contextmanager
     def context(

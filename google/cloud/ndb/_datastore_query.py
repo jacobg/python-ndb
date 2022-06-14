@@ -22,9 +22,7 @@ import os
 
 from google.cloud import environment_vars
 
-from google.cloud.datastore_v1.proto import datastore_pb2
-from google.cloud.datastore_v1.proto import entity_pb2
-from google.cloud.datastore_v1.proto import query_pb2
+from google.cloud.datastore_v1 import types as datastore_types
 from google.cloud.datastore import helpers, Key
 
 from google.cloud.ndb import context as context_module
@@ -37,25 +35,25 @@ from google.cloud.ndb import utils
 
 log = logging.getLogger(__name__)
 
-MoreResultsType = query_pb2.QueryResultBatch.MoreResultsType
-NO_MORE_RESULTS = MoreResultsType.Value("NO_MORE_RESULTS")
-NOT_FINISHED = MoreResultsType.Value("NOT_FINISHED")
-MORE_RESULTS_AFTER_LIMIT = MoreResultsType.Value("MORE_RESULTS_AFTER_LIMIT")
+MoreResultsType = datastore_types.QueryResultBatch.MoreResultsType
+NO_MORE_RESULTS = MoreResultsType.NO_MORE_RESULTS
+NOT_FINISHED = MoreResultsType.NOT_FINISHED
+MORE_RESULTS_AFTER_LIMIT = MoreResultsType.MORE_RESULTS_AFTER_LIMIT
 
-ResultType = query_pb2.EntityResult.ResultType
-RESULT_TYPE_FULL = ResultType.Value("FULL")
-RESULT_TYPE_KEY_ONLY = ResultType.Value("KEY_ONLY")
-RESULT_TYPE_PROJECTION = ResultType.Value("PROJECTION")
+ResultType = datastore_types.EntityResult.ResultType
+RESULT_TYPE_FULL = ResultType.FULL
+RESULT_TYPE_KEY_ONLY = ResultType.KEY_ONLY
+RESULT_TYPE_PROJECTION = ResultType.PROJECTION
 
-DOWN = query_pb2.PropertyOrder.DESCENDING
-UP = query_pb2.PropertyOrder.ASCENDING
+DOWN = datastore_types.PropertyOrder.Direction.DESCENDING
+UP = datastore_types.PropertyOrder.Direction.ASCENDING
 
 FILTER_OPERATORS = {
-    "=": query_pb2.PropertyFilter.EQUAL,
-    "<": query_pb2.PropertyFilter.LESS_THAN,
-    "<=": query_pb2.PropertyFilter.LESS_THAN_OR_EQUAL,
-    ">": query_pb2.PropertyFilter.GREATER_THAN,
-    ">=": query_pb2.PropertyFilter.GREATER_THAN_OR_EQUAL,
+    "=": datastore_types.PropertyFilter.Operator.EQUAL,
+    "<": datastore_types.PropertyFilter.Operator.LESS_THAN,
+    "<=": datastore_types.PropertyFilter.Operator.LESS_THAN_OR_EQUAL,
+    ">": datastore_types.PropertyFilter.Operator.GREATER_THAN,
+    ">=": datastore_types.PropertyFilter.Operator.GREATER_THAN_OR_EQUAL,
 }
 
 _KEY_NOT_IN_CACHE = object()
@@ -71,13 +69,13 @@ def make_filter(name, op, value):
         value (Any): The value for comparison.
 
     Returns:
-        query_pb2.PropertyFilter: The filter protocol buffer.
+        datastore_types.PropertyFilter: The filter protocol buffer.
     """
-    filter_pb = query_pb2.PropertyFilter(
-        property=query_pb2.PropertyReference(name=name),
+    filter_pb = datastore_types.PropertyFilter(
+        property=datastore_types.PropertyReference(name=name),
         op=FILTER_OPERATORS[op],
     )
-    helpers._set_protobuf_value(filter_pb.value, value)
+    helpers._set_protobuf_value(filter_pb.value._pb, value)
     return filter_pb
 
 
@@ -85,14 +83,14 @@ def make_composite_and_filter(filter_pbs):
     """Make a composite filter protocol buffer using AND.
 
     Args:
-        List[Union[query_pb2.PropertyFilter, query_pb2.CompositeFilter]]: The
+        List[Union[datastore_types.PropertyFilter, datastore_types.CompositeFilter]]: The
             list of filters to be combined.
 
     Returns:
-        query_pb2.CompositeFilter: The new composite filter.
+        datastore_types.CompositeFilter: The new composite filter.
     """
-    return query_pb2.CompositeFilter(
-        op=query_pb2.CompositeFilter.AND,
+    return datastore_types.CompositeFilter(
+        op=datastore_types.CompositeFilter.Operator.AND,
         filters=[_filter_pb(filter_pb) for filter_pb in filter_pbs],
     )
 
@@ -476,7 +474,7 @@ class _PostFilterQueryIteratorImpl(QueryIterator):
 
     Args:
         query (query.QueryOptions): The query spec.
-        predicate (Callable[[entity_pb2.Entity], bool]): Predicate from post
+        predicate (Callable[[datastore_types.Entity], bool]): Predicate from post
             filter(s) to be applied. Only entity results for which this
             predicate returns :data:`True` will be returned.
         raw (bool): Whether or not to marshall NDB entities or keys for query
@@ -683,7 +681,7 @@ class _MultiQueryIteratorImpl(QueryIterator):
                 next_result = result_sets[0].next()
 
             # Check to see if it's a duplicate
-            hash_key = next_result.result_pb.entity.key.SerializeToString()
+            hash_key = next_result.result_pb.entity.key._pb.SerializeToString()
             if hash_key in self._seen_keys:
                 continue
 
@@ -750,8 +748,8 @@ class _Result(object):
     """A single, sortable query result.
 
     Args:
-        result_type (query_pb2.EntityResult.ResultType): The type of result.
-        result_pb (query_pb2.EntityResult): Protocol buffer result.
+        result_type (datastore_types.EntityResult.ResultType): The type of result.
+        result_pb (datastore_types.EntityResult): Protocol buffer result.
         order_by (Optional[Sequence[query.PropertyOrder]]): Ordering for the
             query. Used to merge sorted result sets while maintaining sort
             order.
@@ -811,9 +809,9 @@ class _Result(object):
                 ).flat_path
             else:
                 this_value_pb = self.result_pb.entity.properties[order.name]
-                this_value = helpers._get_value_from_value_pb(this_value_pb)
+                this_value = helpers._get_value_from_value_pb(this_value_pb._pb)
                 other_value_pb = other.result_pb.entity.properties[order.name]
-                other_value = helpers._get_value_from_value_pb(other_value_pb)
+                other_value = helpers._get_value_from_value_pb(other_value_pb._pb)
 
                 # Compare key paths if ordering by key property
                 if isinstance(this_value, Key):
@@ -903,27 +901,27 @@ def _query_to_protobuf(query):
         query (query.QueryOptions): The query spec.
 
     Returns:
-        query_pb2.Query: The protocol buffer representation of the query.
+        datastore_types.Query: The protocol buffer representation of the query.
     """
     query_args = {}
     if query.kind:
-        query_args["kind"] = [query_pb2.KindExpression(name=query.kind)]
+        query_args["kind"] = [datastore_types.KindExpression(name=query.kind)]
 
     if query.projection:
         query_args["projection"] = [
-            query_pb2.Projection(property=query_pb2.PropertyReference(name=name))
+            datastore_types.Projection(property=datastore_types.PropertyReference(name=name))
             for name in query.projection
         ]
 
     if query.distinct_on:
         query_args["distinct_on"] = [
-            query_pb2.PropertyReference(name=name) for name in query.distinct_on
+            datastore_types.PropertyReference(name=name) for name in query.distinct_on
         ]
 
     if query.order_by:
         query_args["order"] = [
-            query_pb2.PropertyOrder(
-                property=query_pb2.PropertyReference(name=order.name),
+            datastore_types.PropertyOrder(
+                property=datastore_types.PropertyReference(name=order.name),
                 direction=DOWN if order.reverse else UP,
             )
             for order in query.order_by
@@ -933,21 +931,23 @@ def _query_to_protobuf(query):
 
     if query.ancestor:
         ancestor_pb = query.ancestor._key.to_protobuf()
-        ancestor_filter_pb = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="__key__"),
-            op=query_pb2.PropertyFilter.HAS_ANCESTOR,
+        ancestor_filter_pb = datastore_types.PropertyFilter(
+            property=datastore_types.PropertyReference(name="__key__"),
+            op=datastore_types.PropertyFilter.Operator.HAS_ANCESTOR,
         )
-        ancestor_filter_pb.value.key_value.CopyFrom(ancestor_pb)
+        ancestor_filter_pb.value.key_value._pb.CopyFrom(ancestor_pb._pb)
 
         if filter_pb is None:
             filter_pb = ancestor_filter_pb
 
-        elif isinstance(filter_pb, query_pb2.CompositeFilter):
-            filter_pb.filters.add(property_filter=ancestor_filter_pb)
+        elif isinstance(filter_pb, datastore_types.CompositeFilter):
+            filter_ = datastore_types.Filter()
+            filter_.property_filter = ancestor_filter_pb
+            filter_pb.filters.append(filter_)
 
         else:
-            filter_pb = query_pb2.CompositeFilter(
-                op=query_pb2.CompositeFilter.AND,
+            filter_pb = datastore_types.CompositeFilter(
+                op=datastore_types.CompositeFilter.Operator.AND,
                 filters=[
                     _filter_pb(filter_pb),
                     _filter_pb(ancestor_filter_pb),
@@ -963,13 +963,13 @@ def _query_to_protobuf(query):
     if query.end_cursor:
         query_args["end_cursor"] = query.end_cursor.cursor
 
-    query_pb = query_pb2.Query(**query_args)
+    query_pb = datastore_types.Query(**query_args)
 
     if query.offset:
         query_pb.offset = query.offset
 
     if query.limit:
-        query_pb.limit.value = query.limit
+        query_pb.limit = query.limit
 
     return query_pb
 
@@ -981,17 +981,17 @@ def _filter_pb(filter_pb):
     PropertyFilter or CompositeFilter as a sole attribute.
 
     Args:
-        filter_pb (Union[query_pb2.CompositeFilter, query_pb2.PropertyFilter]):
+        filter_pb (Union[datastore_types.CompositeFilter, datastore_types.PropertyFilter]):
             The actual filter.
 
     Returns:
-        query_pb2.Filter: The filter at the higher level of abstraction
+        datastore_types.Filter: The filter at the higher level of abstraction
             required to use it in a query.
     """
-    if isinstance(filter_pb, query_pb2.CompositeFilter):
-        return query_pb2.Filter(composite_filter=filter_pb)
+    if isinstance(filter_pb, datastore_types.CompositeFilter):
+        return datastore_types.Filter(composite_filter=filter_pb)
 
-    return query_pb2.Filter(property_filter=filter_pb)
+    return datastore_types.Filter(property_filter=filter_pb)
 
 
 @tasklets.tasklet
@@ -1005,18 +1005,18 @@ def _datastore_run_query(query):
         tasklets.Future:
     """
     query_pb = _query_to_protobuf(query)
-    partition_id = entity_pb2.PartitionId(
+    partition_id = datastore_types.PartitionId(
         project_id=query.project, namespace_id=query.namespace
     )
     read_options = _datastore_api.get_read_options(query)
-    request = datastore_pb2.RunQueryRequest(
+    request = datastore_types.RunQueryRequest(
         project_id=query.project,
         partition_id=partition_id,
         query=query_pb,
         read_options=read_options,
     )
     response = yield _datastore_api.make_call(
-        "RunQuery", request, timeout=query.timeout
+        "run_query", request, timeout=query.timeout
     )
     utils.logging_debug(log, response)
     raise tasklets.Return(response)

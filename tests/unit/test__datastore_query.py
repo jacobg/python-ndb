@@ -21,9 +21,7 @@ except ImportError:  # pragma: NO PY3 COVER
 
 import pytest
 
-from google.cloud.datastore_v1.proto import datastore_pb2
-from google.cloud.datastore_v1.proto import entity_pb2
-from google.cloud.datastore_v1.proto import query_pb2
+from google.cloud.datastore_v1 import types as ds_types
 
 from google.cloud.ndb import _datastore_query
 from google.cloud.ndb import context as context_module
@@ -37,31 +35,31 @@ from . import utils
 
 
 def test_make_filter():
-    expected = query_pb2.PropertyFilter(
-        property=query_pb2.PropertyReference(name="harry"),
-        op=query_pb2.PropertyFilter.EQUAL,
-        value=entity_pb2.Value(string_value="Harold"),
+    expected = ds_types.PropertyFilter(
+        property=ds_types.PropertyReference(name="harry"),
+        op=ds_types.PropertyFilter.Operator.EQUAL,
+        value=ds_types.Value(string_value="Harold"),
     )
     assert _datastore_query.make_filter("harry", "=", u"Harold") == expected
 
 
 def test_make_composite_and_filter():
     filters = [
-        query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="harry"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="Harold"),
+        ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="harry"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="Harold"),
         ),
-        query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="josie"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="Josephine"),
+        ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="josie"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="Josephine"),
         ),
     ]
-    expected = query_pb2.CompositeFilter(
-        op=query_pb2.CompositeFilter.AND,
+    expected = ds_types.CompositeFilter(
+        op=ds_types.CompositeFilter.Operator.AND,
         filters=[
-            query_pb2.Filter(property_filter=sub_filter) for sub_filter in filters
+            ds_types.Filter(property_filter=sub_filter) for sub_filter in filters
         ],
     )
     assert _datastore_query.make_composite_and_filter(filters) == expected
@@ -158,7 +156,7 @@ class Test_count:
                         "more_results",
                         "skipped_results",
                         "entity_results",
-                        "end_cursor",
+                        "end_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -173,7 +171,7 @@ class Test_count:
                         "more_results",
                         "skipped_results",
                         "entity_results",
-                        "end_cursor",
+                        "end_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -190,7 +188,7 @@ class Test_count:
                         "skipped_results",
                         "entity_results",
                         "end_cursor",
-                        "skipped_cursor",
+                        "skipped_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -250,7 +248,7 @@ class Test_count:
                         "more_results",
                         "skipped_results",
                         "entity_results",
-                        "end_cursor",
+                        "end_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -267,7 +265,7 @@ class Test_count:
                         "skipped_results",
                         "entity_results",
                         "end_cursor",
-                        "skipped_cursor",
+                        "skipped_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -332,7 +330,7 @@ class Test_count:
                         "more_results",
                         "skipped_results",
                         "entity_results",
-                        "end_cursor",
+                        "end_cursor"
                     ),
                 ),
                 spec=("batch",),
@@ -591,21 +589,21 @@ class Test_QueryIteratorImpl:
     @mock.patch("google.cloud.ndb._datastore_query._datastore_run_query")
     def test__next_batch(_datastore_run_query):
         entity1 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
             )
         )
         entity2 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=43)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=43)],
             )
         )
         entity3 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=44)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=44)],
             )
         )
         entity_results = [
@@ -616,10 +614,10 @@ class Test_QueryIteratorImpl:
         _datastore_run_query.return_value = utils.future_result(
             mock.Mock(
                 batch=mock.Mock(
-                    entity_result_type=query_pb2.EntityResult.FULL,
+                    entity_result_type=ds_types.EntityResult.ResultType.FULL,
                     entity_results=entity_results,
                     end_cursor=b"abc",
-                    more_results=query_pb2.QueryResultBatch.NO_MORE_RESULTS,
+                    more_results=ds_types.QueryResultBatch.MoreResultsType.NO_MORE_RESULTS,
                 )
             )
         )
@@ -630,7 +628,7 @@ class Test_QueryIteratorImpl:
         assert iterator._index == 0
         assert len(iterator._batch) == 3
         assert iterator._batch[0].result_pb.entity == entity1
-        assert iterator._batch[0].result_type == query_pb2.EntityResult.FULL
+        assert iterator._batch[0].result_type == ds_types.EntityResult.ResultType.FULL
         assert iterator._batch[0].order_by is None
         assert not iterator._has_next_batch
 
@@ -638,21 +636,21 @@ class Test_QueryIteratorImpl:
     @mock.patch("google.cloud.ndb._datastore_query._datastore_run_query")
     def test__next_batch_cached_delete(_datastore_run_query, in_context):
         entity1 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
             )
         )
         entity2 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=43)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=43)],
             )
         )
         entity3 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=44)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=44)],
             )
         )
         entity_results = [
@@ -664,10 +662,10 @@ class Test_QueryIteratorImpl:
         _datastore_run_query.return_value = utils.future_result(
             mock.Mock(
                 batch=mock.Mock(
-                    entity_result_type=query_pb2.EntityResult.FULL,
+                    entity_result_type=ds_types.EntityResult.ResultType.FULL,
                     entity_results=entity_results,
                     end_cursor=b"abc",
-                    more_results=query_pb2.QueryResultBatch.NO_MORE_RESULTS,
+                    more_results=ds_types.QueryResultBatch.MoreResultsType.NO_MORE_RESULTS,
                 )
             )
         )
@@ -678,7 +676,7 @@ class Test_QueryIteratorImpl:
         assert iterator._index == 0
         assert len(iterator._batch) == 2
         assert iterator._batch[0].result_pb.entity == entity1
-        assert iterator._batch[0].result_type == query_pb2.EntityResult.FULL
+        assert iterator._batch[0].result_type == ds_types.EntityResult.ResultType.FULL
         assert iterator._batch[0].order_by is None
         assert iterator._batch[1].result_pb.entity == entity3
         assert not iterator._has_next_batch
@@ -688,21 +686,21 @@ class Test_QueryIteratorImpl:
     @mock.patch("google.cloud.ndb._datastore_query._datastore_run_query")
     def test__next_batch_has_more(_datastore_run_query):
         entity1 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
             )
         )
         entity2 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=43)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=43)],
             )
         )
         entity3 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=44)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=44)],
             )
         )
         entity_results = [
@@ -713,10 +711,10 @@ class Test_QueryIteratorImpl:
         _datastore_run_query.return_value = utils.future_result(
             mock.Mock(
                 batch=mock.Mock(
-                    entity_result_type=query_pb2.EntityResult.PROJECTION,
+                    entity_result_type=ds_types.EntityResult.ResultType.PROJECTION,
                     entity_results=entity_results,
                     end_cursor=b"abc",
-                    more_results=query_pb2.QueryResultBatch.NOT_FINISHED,
+                    more_results=ds_types.QueryResultBatch.MoreResultsType.NOT_FINISHED,
                 )
             )
         )
@@ -727,7 +725,7 @@ class Test_QueryIteratorImpl:
         assert iterator._index == 0
         assert len(iterator._batch) == 3
         assert iterator._batch[0].result_pb.entity == entity1
-        assert iterator._batch[0].result_type == query_pb2.EntityResult.PROJECTION
+        assert iterator._batch[0].result_type == ds_types.EntityResult.ResultType.PROJECTION
         assert iterator._batch[0].order_by is None
         assert iterator._has_next_batch
         assert iterator._query.start_cursor.cursor == b"abc"
@@ -741,21 +739,21 @@ class Test_QueryIteratorImpl:
         https://github.com/googleapis/python-ndb/issues/236
         """
         entity1 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
             )
         )
         entity2 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=43)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=43)],
             )
         )
         entity3 = mock.Mock(
-            key=entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=44)],
+            key=ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=44)],
             )
         )
         entity_results = [
@@ -766,11 +764,11 @@ class Test_QueryIteratorImpl:
         _datastore_run_query.return_value = utils.future_result(
             mock.Mock(
                 batch=mock.Mock(
-                    entity_result_type=query_pb2.EntityResult.FULL,
+                    entity_result_type=ds_types.EntityResult.ResultType.FULL,
                     entity_results=entity_results,
                     end_cursor=b"abc",
                     skipped_results=5,
-                    more_results=query_pb2.QueryResultBatch.NOT_FINISHED,
+                    more_results=ds_types.QueryResultBatch.MoreResultsType.NOT_FINISHED,
                 )
             )
         )
@@ -781,7 +779,7 @@ class Test_QueryIteratorImpl:
         assert iterator._index == 0
         assert len(iterator._batch) == 3
         assert iterator._batch[0].result_pb.entity == entity1
-        assert iterator._batch[0].result_type == query_pb2.EntityResult.FULL
+        assert iterator._batch[0].result_type == ds_types.EntityResult.ResultType.FULL
         assert iterator._batch[0].order_by is None
         assert iterator._has_next_batch
         assert iterator._query.start_cursor.cursor == b"abc"
@@ -1467,9 +1465,18 @@ class MockResultPB:
         self.result = result
         self.entity = self
         self.key = self
+        self._pb = MockResultPBInternal(self)
 
     def SerializeToString(self):
         return self.result
+
+
+class MockResultPBInternal:
+    def __init__(self, result_pb):
+        self.result_pb = result_pb
+
+    def SerializeToString(self):
+        return self.result_pb.result
 
 
 class MockResultSet:
@@ -1499,12 +1506,12 @@ class Test_Result:
         def result(foo, bar=0, baz=""):
             return _datastore_query._Result(
                 result_type=None,
-                result_pb=query_pb2.EntityResult(
-                    entity=entity_pb2.Entity(
+                result_pb=ds_types.EntityResult(
+                    entity=ds_types.Entity(
                         properties={
-                            "foo": entity_pb2.Value(string_value=foo),
-                            "bar": entity_pb2.Value(integer_value=bar),
-                            "baz": entity_pb2.Value(string_value=baz),
+                            "foo": ds_types.Value(string_value=foo),
+                            "bar": ds_types.Value(integer_value=bar),
+                            "baz": ds_types.Value(string_value=baz),
                         }
                     )
                 ),
@@ -1553,52 +1560,52 @@ class Test_Result:
     @staticmethod
     def test__compare_with_order_by_entity_key():
         def result(key_path):
-            key_pb = entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
+            key_pb = ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
                 path=[key_path],
             )
             return _datastore_query._Result(
                 result_type=None,
-                result_pb=query_pb2.EntityResult(entity=entity_pb2.Entity(key=key_pb)),
+                result_pb=ds_types.EntityResult(entity=ds_types.Entity(key=key_pb)),
                 order_by=[
                     query_module.PropertyOrder("__key__"),
                 ],
             )
 
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="a")) < result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="b")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="a")) < result(
+            ds_types.Key.PathElement(kind="ThisKind", name="b")
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="b")) > result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="a")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="b")) > result(
+            ds_types.Key.PathElement(kind="ThisKind", name="a")
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="a")) != result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="b")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="a")) != result(
+            ds_types.Key.PathElement(kind="ThisKind", name="b")
         )
 
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=1)) < result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=2)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=1)) < result(
+            ds_types.Key.PathElement(kind="ThisKind", id=2)
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=2)) > result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=1)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=2)) > result(
+            ds_types.Key.PathElement(kind="ThisKind", id=1)
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=1)) != result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=2)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=1)) != result(
+            ds_types.Key.PathElement(kind="ThisKind", id=2)
         )
 
     @staticmethod
     def test__compare_with_order_by_key_property():
         def result(foo_key_path):
-            foo_key = entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
+            foo_key = ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
                 path=[foo_key_path],
             )
 
             return _datastore_query._Result(
                 result_type=None,
-                result_pb=query_pb2.EntityResult(
-                    entity=entity_pb2.Entity(
+                result_pb=ds_types.EntityResult(
+                    entity=ds_types.Entity(
                         properties={
-                            "foo": entity_pb2.Value(key_value=foo_key),
+                            "foo": ds_types.Value(key_value=foo_key),
                         }
                     )
                 ),
@@ -1607,24 +1614,24 @@ class Test_Result:
                 ],
             )
 
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="a")) < result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="b")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="a")) < result(
+            ds_types.Key.PathElement(kind="ThisKind", name="b")
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="b")) > result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="a")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="b")) > result(
+            ds_types.Key.PathElement(kind="ThisKind", name="a")
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", name="a")) != result(
-            entity_pb2.Key.PathElement(kind="ThisKind", name="b")
+        assert result(ds_types.Key.PathElement(kind="ThisKind", name="a")) != result(
+            ds_types.Key.PathElement(kind="ThisKind", name="b")
         )
 
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=1)) < result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=2)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=1)) < result(
+            ds_types.Key.PathElement(kind="ThisKind", id=2)
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=2)) > result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=1)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=2)) > result(
+            ds_types.Key.PathElement(kind="ThisKind", id=1)
         )
-        assert result(entity_pb2.Key.PathElement(kind="ThisKind", id=1)) != result(
-            entity_pb2.Key.PathElement(kind="ThisKind", id=2)
+        assert result(ds_types.Key.PathElement(kind="ThisKind", id=1)) != result(
+            ds_types.Key.PathElement(kind="ThisKind", id=2)
         )
 
     @staticmethod
@@ -1642,9 +1649,9 @@ class Test_Result:
     @pytest.mark.usefixtures("in_context")
     @mock.patch("google.cloud.ndb._datastore_query.model")
     def test_entity_full_entity(model):
-        key_pb = entity_pb2.Key(
-            partition_id=entity_pb2.PartitionId(project_id="testing"),
-            path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+        key_pb = ds_types.Key(
+            partition_id=ds_types.PartitionId(project_id="testing"),
+            path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
         )
         entity_pb = mock.Mock(key=key_pb)
         entity = mock.Mock(key=key_module.Key("ThisKind", 42))
@@ -1662,9 +1669,9 @@ class Test_Result:
     @mock.patch("google.cloud.ndb._datastore_query.model")
     def test_entity_full_entity_cached(model):
         key = key_module.Key("ThisKind", 42)
-        key_pb = entity_pb2.Key(
-            partition_id=entity_pb2.PartitionId(project_id="testing"),
-            path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+        key_pb = ds_types.Key(
+            partition_id=ds_types.PartitionId(project_id="testing"),
+            path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
         )
         entity = mock.Mock(key=key_pb)
         cached_entity = mock.Mock(key=key_pb, _key=key)
@@ -1685,9 +1692,9 @@ class Test_Result:
     def test_entity_full_entity_no_cache(model):
         context = context_module.get_context()
         with context.new(cache_policy=False).use():
-            key_pb = entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+            key_pb = ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
             )
             entity = mock.Mock(key=key_pb)
             model._entity_from_protobuf.return_value = entity
@@ -1700,9 +1707,9 @@ class Test_Result:
     @staticmethod
     @pytest.mark.usefixtures("in_context")
     def test_entity_key_only():
-        key_pb = entity_pb2.Key(
-            partition_id=entity_pb2.PartitionId(project_id="testing"),
-            path=[entity_pb2.Key.PathElement(kind="ThisKind", id=42)],
+        key_pb = ds_types.Key(
+            partition_id=ds_types.PartitionId(project_id="testing"),
+            path=[ds_types.Key.PathElement(kind="ThisKind", id=42)],
         )
         result = _datastore_query._Result(
             _datastore_query.RESULT_TYPE_KEY_ONLY,
@@ -1737,29 +1744,29 @@ class Test__query_to_protobuf:
     @staticmethod
     def test_no_args():
         query = query_module.QueryOptions()
-        assert _datastore_query._query_to_protobuf(query) == query_pb2.Query()
+        assert _datastore_query._query_to_protobuf(query) == ds_types.Query()
 
     @staticmethod
     def test_kind():
         query = query_module.QueryOptions(kind="Foo")
-        assert _datastore_query._query_to_protobuf(query) == query_pb2.Query(
-            kind=[query_pb2.KindExpression(name="Foo")]
+        assert _datastore_query._query_to_protobuf(query) == ds_types.Query(
+            kind=[ds_types.KindExpression(name="Foo")]
         )
 
     @staticmethod
     def test_ancestor():
         key = key_module.Key("Foo", 123)
         query = query_module.QueryOptions(ancestor=key)
-        expected_pb = query_pb2.Query(
-            filter=query_pb2.Filter(
-                property_filter=query_pb2.PropertyFilter(
-                    property=query_pb2.PropertyReference(name="__key__"),
-                    op=query_pb2.PropertyFilter.HAS_ANCESTOR,
+        expected_pb = ds_types.Query(
+            filter=ds_types.Filter(
+                property_filter=ds_types.PropertyFilter(
+                    property=ds_types.PropertyReference(name="__key__"),
+                    op=ds_types.PropertyFilter.Operator.HAS_ANCESTOR,
                 )
             )
         )
-        expected_pb.filter.property_filter.value.key_value.CopyFrom(
-            key._key.to_protobuf()
+        expected_pb.filter.property_filter.value.key_value._pb.CopyFrom(
+            key._key.to_protobuf()._pb
         )
         assert _datastore_query._query_to_protobuf(query) == expected_pb
 
@@ -1770,23 +1777,23 @@ class Test__query_to_protobuf:
         query = query_module.QueryOptions(ancestor=key, filters=foo == "bar")
         query_pb = _datastore_query._query_to_protobuf(query)
 
-        filter_pb = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="foo"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="bar"),
+        filter_pb = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="foo"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="bar"),
         )
-        ancestor_pb = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="__key__"),
-            op=query_pb2.PropertyFilter.HAS_ANCESTOR,
+        ancestor_pb = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="__key__"),
+            op=ds_types.PropertyFilter.Operator.HAS_ANCESTOR,
         )
-        ancestor_pb.value.key_value.CopyFrom(key._key.to_protobuf())
-        expected_pb = query_pb2.Query(
-            filter=query_pb2.Filter(
-                composite_filter=query_pb2.CompositeFilter(
-                    op=query_pb2.CompositeFilter.AND,
+        ancestor_pb.value.key_value._pb.CopyFrom(key._key.to_protobuf()._pb)
+        expected_pb = ds_types.Query(
+            filter=ds_types.Filter(
+                composite_filter=ds_types.CompositeFilter(
+                    op=ds_types.CompositeFilter.Operator.AND,
                     filters=[
-                        query_pb2.Filter(property_filter=filter_pb),
-                        query_pb2.Filter(property_filter=ancestor_pb),
+                        ds_types.Filter(property_filter=filter_pb),
+                        ds_types.Filter(property_filter=ancestor_pb),
                     ],
                 )
             )
@@ -1804,29 +1811,29 @@ class Test__query_to_protobuf:
         )
         query_pb = _datastore_query._query_to_protobuf(query)
 
-        filter_pb1 = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="foo"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="bar"),
+        filter_pb1 = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="foo"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="bar"),
         )
-        filter_pb2 = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="food"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="barn"),
+        filter_pb2 = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="food"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="barn"),
         )
-        ancestor_pb = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="__key__"),
-            op=query_pb2.PropertyFilter.HAS_ANCESTOR,
+        ancestor_pb = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="__key__"),
+            op=ds_types.PropertyFilter.Operator.HAS_ANCESTOR,
         )
-        ancestor_pb.value.key_value.CopyFrom(key._key.to_protobuf())
-        expected_pb = query_pb2.Query(
-            filter=query_pb2.Filter(
-                composite_filter=query_pb2.CompositeFilter(
-                    op=query_pb2.CompositeFilter.AND,
+        ancestor_pb.value.key_value._pb.CopyFrom(key._key.to_protobuf()._pb)
+        expected_pb = ds_types.Query(
+            filter=ds_types.Filter(
+                composite_filter=ds_types.CompositeFilter(
+                    op=ds_types.CompositeFilter.Operator.AND,
                     filters=[
-                        query_pb2.Filter(property_filter=filter_pb1),
-                        query_pb2.Filter(property_filter=filter_pb2),
-                        query_pb2.Filter(property_filter=ancestor_pb),
+                        ds_types.Filter(property_filter=filter_pb1),
+                        ds_types.Filter(property_filter=filter_pb2),
+                        ds_types.Filter(property_filter=ancestor_pb),
                     ],
                 )
             )
@@ -1836,10 +1843,10 @@ class Test__query_to_protobuf:
     @staticmethod
     def test_projection():
         query = query_module.QueryOptions(projection=("a", "b"))
-        expected_pb = query_pb2.Query(
+        expected_pb = ds_types.Query(
             projection=[
-                query_pb2.Projection(property=query_pb2.PropertyReference(name="a")),
-                query_pb2.Projection(property=query_pb2.PropertyReference(name="b")),
+                ds_types.Projection(property=ds_types.PropertyReference(name="a")),
+                ds_types.Projection(property=ds_types.PropertyReference(name="b")),
             ]
         )
         assert _datastore_query._query_to_protobuf(query) == expected_pb
@@ -1847,10 +1854,10 @@ class Test__query_to_protobuf:
     @staticmethod
     def test_distinct_on():
         query = query_module.QueryOptions(distinct_on=("a", "b"))
-        expected_pb = query_pb2.Query(
+        expected_pb = ds_types.Query(
             distinct_on=[
-                query_pb2.PropertyReference(name="a"),
-                query_pb2.PropertyReference(name="b"),
+                ds_types.PropertyReference(name="a"),
+                ds_types.PropertyReference(name="b"),
             ]
         )
         assert _datastore_query._query_to_protobuf(query) == expected_pb
@@ -1863,15 +1870,15 @@ class Test__query_to_protobuf:
                 query_module.PropertyOrder("b", reverse=True),
             ]
         )
-        expected_pb = query_pb2.Query(
+        expected_pb = ds_types.Query(
             order=[
-                query_pb2.PropertyOrder(
-                    property=query_pb2.PropertyReference(name="a"),
-                    direction=query_pb2.PropertyOrder.ASCENDING,
+                ds_types.PropertyOrder(
+                    property=ds_types.PropertyReference(name="a"),
+                    direction=ds_types.PropertyOrder.Direction.ASCENDING,
                 ),
-                query_pb2.PropertyOrder(
-                    property=query_pb2.PropertyReference(name="b"),
-                    direction=query_pb2.PropertyOrder.DESCENDING,
+                ds_types.PropertyOrder(
+                    property=ds_types.PropertyReference(name="b"),
+                    direction=ds_types.PropertyOrder.Direction.DESCENDING,
                 ),
             ]
         )
@@ -1883,40 +1890,40 @@ class Test__query_to_protobuf:
         query = query_module.QueryOptions(kind="Foo", filters=(foo == "bar"))
         query_pb = _datastore_query._query_to_protobuf(query)
 
-        filter_pb = query_pb2.PropertyFilter(
-            property=query_pb2.PropertyReference(name="foo"),
-            op=query_pb2.PropertyFilter.EQUAL,
-            value=entity_pb2.Value(string_value="bar"),
+        filter_pb = ds_types.PropertyFilter(
+            property=ds_types.PropertyReference(name="foo"),
+            op=ds_types.PropertyFilter.Operator.EQUAL,
+            value=ds_types.Value(string_value="bar"),
         )
-        expected_pb = query_pb2.Query(
-            kind=[query_pb2.KindExpression(name="Foo")],
-            filter=query_pb2.Filter(property_filter=filter_pb),
+        expected_pb = ds_types.Query(
+            kind=[ds_types.KindExpression(name="Foo")],
+            filter=ds_types.Filter(property_filter=filter_pb),
         )
         assert query_pb == expected_pb
 
     @staticmethod
     def test_offset():
         query = query_module.QueryOptions(offset=20)
-        assert _datastore_query._query_to_protobuf(query) == query_pb2.Query(offset=20)
+        assert _datastore_query._query_to_protobuf(query) == ds_types.Query(offset=20)
 
     @staticmethod
     def test_limit():
         query = query_module.QueryOptions(limit=20)
-        expected_pb = query_pb2.Query()
-        expected_pb.limit.value = 20
+        expected_pb = ds_types.Query()
+        expected_pb.limit = 20
         assert _datastore_query._query_to_protobuf(query) == expected_pb
 
     @staticmethod
     def test_start_cursor():
         query = query_module.QueryOptions(start_cursor=_datastore_query.Cursor(b"abc"))
-        assert _datastore_query._query_to_protobuf(query) == query_pb2.Query(
+        assert _datastore_query._query_to_protobuf(query) == ds_types.Query(
             start_cursor=b"abc"
         )
 
     @staticmethod
     def test_end_cursor():
         query = query_module.QueryOptions(end_cursor=_datastore_query.Cursor(b"abc"))
-        assert _datastore_query._query_to_protobuf(query) == query_pb2.Query(
+        assert _datastore_query._query_to_protobuf(query) == ds_types.Query(
             end_cursor=b"abc"
         )
 
@@ -1929,17 +1936,17 @@ class Test__datastore_run_query:
         query = query_module.QueryOptions(project="testing", namespace="")
         query_pb = _datastore_query._query_to_protobuf(query)
         _datastore_api.make_call.return_value = utils.future_result("foo")
-        read_options = datastore_pb2.ReadOptions()
-        request = datastore_pb2.RunQueryRequest(
+        read_options = ds_types.ReadOptions()
+        request = ds_types.RunQueryRequest(
             project_id="testing",
-            partition_id=entity_pb2.PartitionId(project_id="testing", namespace_id=""),
+            partition_id=ds_types.PartitionId(project_id="testing", namespace_id=""),
             query=query_pb,
             read_options=read_options,
         )
         _datastore_api.get_read_options.return_value = read_options
         assert _datastore_query._datastore_run_query(query).result() == "foo"
         _datastore_api.make_call.assert_called_once_with(
-            "RunQuery", request, timeout=None
+            "run_query", request, timeout=None
         )
         _datastore_api.get_read_options.assert_called_once_with(query)
 

@@ -25,8 +25,7 @@ from google.api_core import exceptions as core_exceptions
 from google.cloud.datastore import entity
 from google.cloud.datastore import helpers
 from google.cloud.datastore import key as ds_key_module
-from google.cloud.datastore_v1.proto import datastore_pb2
-from google.cloud.datastore_v1.proto import entity_pb2
+from google.cloud.datastore_v1 import types as ds_types
 from google.cloud.ndb import _batch
 from google.cloud.ndb import _cache
 from google.cloud.ndb import context as context_module
@@ -181,8 +180,7 @@ class Test_make_call:
 
 def _mock_key(key_str):
     key = mock.Mock(kind="SomeKind", spec=("to_protobuf", "kind"))
-    key.to_protobuf.return_value = protobuf = mock.Mock(spec=("SerializeToString",))
-    protobuf.SerializeToString.return_value = key_str
+    key.to_protobuf.return_value._pb.SerializeToString.return_value = key_str
     return key
 
 
@@ -260,7 +258,7 @@ class Test_lookup_WithGlobalCache:
 
         entity = SomeKind(key=key)
         entity_pb = model._entity_to_protobuf(entity)
-        cache_value = entity_pb.SerializeToString()
+        cache_value = entity_pb._pb.SerializeToString()
 
         batch = _LookupBatch.return_value
         batch.add.return_value = future_result(entity_pb)
@@ -324,7 +322,7 @@ class Test_lookup_WithGlobalCache:
 
         entity = SomeKind(key=key)
         entity_pb = model._entity_to_protobuf(entity)
-        cache_value = entity_pb.SerializeToString()
+        cache_value = entity_pb._pb.SerializeToString()
 
         global_cache.set({cache_key: cache_value})
 
@@ -377,20 +375,23 @@ class Test_lookup_WithGlobalCache:
 
 class Test_LookupBatch:
     @staticmethod
-    @mock.patch("google.cloud.ndb._datastore_api.entity_pb2")
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
     @mock.patch("google.cloud.ndb._datastore_api._datastore_lookup")
-    def test_idle_callback(_datastore_lookup, entity_pb2, context):
+    def test_idle_callback(_datastore_lookup, ds_types, context):
         class MockKey:
             def __init__(self, key=None):
                 self.key = key
-
+                self._pb = MockKeyPb(self)
+        class MockKeyPb:
+            def __init__(self, mock_key):
+                self.mock_key = mock_key
             def ParseFromString(self, key):
-                self.key = key
+                self.mock_key.key = key            
 
         rpc = tasklets.Future("_datastore_lookup")
         _datastore_lookup.return_value = rpc
 
-        entity_pb2.Key = MockKey
+        ds_types.Key = MockKey
         eventloop = mock.Mock(spec=("queue_rpc", "run"))
         with context.new(eventloop=eventloop).use() as context:
             batch = _api._LookupBatch(_options.ReadOptions())
@@ -402,7 +403,7 @@ class Test_LookupBatch:
             called_with_keys = set((mock_key.key for mock_key in called_with[0]))
             assert called_with_keys == set(["foo", "bar"])
             called_with_options = called_with[1]
-            assert called_with_options == datastore_pb2.ReadOptions()
+            assert called_with_options == ds_types.ReadOptions()
 
             rpc.set_result(None)
             batch.lookup_callback.assert_called_once_with(rpc)
@@ -424,8 +425,8 @@ class Test_LookupBatch:
     @staticmethod
     def test_found():
         def key_pb(key):
-            mock_key = mock.Mock(spec=("SerializeToString",))
-            mock_key.SerializeToString.return_value = key
+            mock_key = mock.Mock()
+            mock_key._pb.SerializeToString.return_value = key
             return mock_key
 
         future1, future2, future3 = (tasklets.Future() for _ in range(3))
@@ -455,8 +456,8 @@ class Test_LookupBatch:
     @staticmethod
     def test_missing():
         def key_pb(key):
-            mock_key = mock.Mock(spec=("SerializeToString",))
-            mock_key.SerializeToString.return_value = key
+            mock_key = mock.Mock()
+            mock_key._pb.SerializeToString.return_value = key
             return mock_key
 
         future1, future2, future3 = (tasklets.Future() for _ in range(3))
@@ -486,8 +487,8 @@ class Test_LookupBatch:
     @staticmethod
     def test_deferred(context):
         def key_pb(key):
-            mock_key = mock.Mock(spec=("SerializeToString",))
-            mock_key.SerializeToString.return_value = key
+            mock_key = mock.Mock()
+            mock_key._pb.SerializeToString.return_value = key
             return mock_key
 
         eventloop = mock.Mock(spec=("add_idle", "run"))
@@ -518,8 +519,8 @@ class Test_LookupBatch:
     @staticmethod
     def test_found_missing_deferred(context):
         def key_pb(key):
-            mock_key = mock.Mock(spec=("SerializeToString",))
-            mock_key.SerializeToString.return_value = key
+            mock_key = mock.Mock()
+            mock_key._pb.SerializeToString.return_value = key
             return mock_key
 
         eventloop = mock.Mock(spec=("add_idle", "run"))
@@ -550,25 +551,26 @@ class Test_LookupBatch:
             assert context.eventloop.add_idle.call_count == 1
 
 
-@mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
-def test__datastore_lookup(datastore_pb2, context):
+@pytest.mark.usefixtures("in_context")
+@mock.patch("google.cloud.ndb._datastore_api.ds_types")
+def test__datastore_lookup(ds_types, context):
     client = mock.Mock(
         project="theproject",
-        stub=mock.Mock(spec=("Lookup",)),
+        stub=mock.Mock(spec=("lookup",)),
         spec=("project", "stub"),
     )
     with context.new(client=client).use() as context:
-        client.stub.Lookup = Lookup = mock.Mock(spec=("future",))
+        client.stub.lookup = lookup = mock.Mock(spec=("future",))
         future = tasklets.Future()
         future.set_result("response")
-        Lookup.future.return_value = future
+        lookup.future.return_value = future
         assert _api._datastore_lookup(["foo", "bar"], None).result() == "response"
 
-        datastore_pb2.LookupRequest.assert_called_once_with(
+        ds_types.LookupRequest.assert_called_once_with(
             project_id="theproject", keys=["foo", "bar"], read_options=None
         )
-        client.stub.Lookup.future.assert_called_once_with(
-            datastore_pb2.LookupRequest.return_value,
+        client.stub.lookup.future.assert_called_once_with(
+            ds_types.LookupRequest.return_value,
             timeout=_api._DEFAULT_TIMEOUT,
         )
 
@@ -578,20 +580,20 @@ class Test_get_read_options:
     @pytest.mark.usefixtures("in_context")
     def test_no_args_no_transaction():
         assert (
-            _api.get_read_options(_options.ReadOptions()) == datastore_pb2.ReadOptions()
+            _api.get_read_options(_options.ReadOptions()) == ds_types.ReadOptions()
         )
 
     @staticmethod
     def test_no_args_transaction(context):
         with context.new(transaction=b"txfoo").use():
             options = _api.get_read_options(_options.ReadOptions())
-            assert options == datastore_pb2.ReadOptions(transaction=b"txfoo")
+            assert options == ds_types.ReadOptions(transaction=b"txfoo")
 
     @staticmethod
     def test_args_override_transaction(context):
         with context.new(transaction=b"txfoo").use():
             options = _api.get_read_options(_options.ReadOptions(transaction=b"txbar"))
-            assert options == datastore_pb2.ReadOptions(transaction=b"txbar")
+            assert options == ds_types.ReadOptions(transaction=b"txbar")
 
     @staticmethod
     @pytest.mark.usefixtures("in_context")
@@ -599,8 +601,8 @@ class Test_get_read_options:
         options = _api.get_read_options(
             _options.ReadOptions(read_consistency=_api.EVENTUAL)
         )
-        assert options == datastore_pb2.ReadOptions(
-            read_consistency=datastore_pb2.ReadOptions.EVENTUAL
+        assert options == ds_types.ReadOptions(
+            read_consistency=ds_types.ReadOptions.ReadConsistency.EVENTUAL
         )
 
     @staticmethod
@@ -616,8 +618,8 @@ class Test_get_read_options:
 
 class Test_put:
     @staticmethod
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
-    def test_no_transaction(datastore_pb2, in_context):
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
+    def test_no_transaction(ds_types, in_context):
         class Mutation:
             def __init__(self, upsert=None):
                 self.upsert = upsert
@@ -629,7 +631,7 @@ class Test_put:
             key = ds_key_module.Key(*path, project="testing")
             return entity.Entity(key=key)
 
-        datastore_pb2.Mutation = Mutation
+        ds_types.Mutation = Mutation
 
         entity1 = MockEntity("a", "1")
         _api.put(entity1, _options.Options())
@@ -648,8 +650,8 @@ class Test_put:
         ]
 
     @staticmethod
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
-    def test_w_transaction(datastore_pb2, in_context):
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
+    def test_w_transaction(ds_types, in_context):
         class Mutation:
             def __init__(self, upsert=None):
                 self.upsert = upsert
@@ -662,7 +664,7 @@ class Test_put:
             return entity.Entity(key=key)
 
         with in_context.new(transaction=b"123").use() as context:
-            datastore_pb2.Mutation = Mutation
+            ds_types.Mutation = Mutation
 
             entity1 = MockEntity("a", "1")
             _api.put(entity1, _options.Options())
@@ -773,7 +775,7 @@ class Test_put_WithGlobalCache:
         cache_key = _cache.global_cache_key(key._key)
 
         entity = SomeKind(key=key)
-        cache_value = model._entity_to_protobuf(entity).SerializeToString()
+        cache_value = model._entity_to_protobuf(entity)._pb.SerializeToString()
 
         batch = Batch.return_value
         batch.put.return_value = future_result(None)
@@ -804,8 +806,8 @@ class Test_put_WithGlobalCache:
 
 class Test_delete:
     @staticmethod
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
-    def test_no_transaction(datastore_pb2, in_context):
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
+    def test_no_transaction(ds_types, in_context):
         class Mutation:
             def __init__(self, delete=None):
                 self.delete = delete
@@ -813,7 +815,7 @@ class Test_delete:
             def __eq__(self, other):
                 return self.delete == other.delete
 
-        datastore_pb2.Mutation = Mutation
+        ds_types.Mutation = Mutation
 
         key1 = key_module.Key("SomeKind", 1)._key
         key2 = key_module.Key("SomeKind", 2)._key
@@ -830,8 +832,8 @@ class Test_delete:
         ]
 
     @staticmethod
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
-    def test_w_transaction(datastore_pb2, in_context):
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
+    def test_w_transaction(ds_types, in_context):
         class Mutation:
             def __init__(self, delete=None):
                 self.delete = delete
@@ -840,7 +842,7 @@ class Test_delete:
                 return self.delete == other.delete
 
         with in_context.new(transaction=b"tx123").use() as context:
-            datastore_pb2.Mutation = Mutation
+            ds_types.Mutation = Mutation
 
             key1 = key_module.Key("SomeKind", 1)._key
             key2 = key_module.Key("SomeKind", 2)._key
@@ -994,9 +996,9 @@ class Test__TransactionalCommitBatch:
     @mock.patch("google.cloud.ndb._datastore_api._datastore_allocate_ids")
     def test_idle_callback_success(datastore_allocate_ids, in_context):
         def Mutation():
-            path = [entity_pb2.Key.PathElement(kind="SomeKind")]
-            return datastore_pb2.Mutation(
-                upsert=entity_pb2.Entity(key=entity_pb2.Key(path=path))
+            path = [ds_types.Key.PathElement(kind="SomeKind")]
+            return ds_types.Mutation(
+                upsert=ds_types.Entity(key=ds_types.Key(path=path))
             )
 
         mutation1, mutation2 = Mutation(), Mutation()
@@ -1015,11 +1017,11 @@ class Test__TransactionalCommitBatch:
             rpc.set_result(
                 mock.Mock(
                     keys=[
-                        entity_pb2.Key(
-                            path=[entity_pb2.Key.PathElement(kind="SomeKind", id=1)]
+                        ds_types.Key(
+                            path=[ds_types.Key.PathElement(kind="SomeKind", id=1)]
                         ),
-                        entity_pb2.Key(
-                            path=[entity_pb2.Key.PathElement(kind="SomeKind", id=2)]
+                        ds_types.Key(
+                            path=[ds_types.Key.PathElement(kind="SomeKind", id=2)]
                         ),
                     ]
                 )
@@ -1036,9 +1038,9 @@ class Test__TransactionalCommitBatch:
     @mock.patch("google.cloud.ndb._datastore_api._datastore_allocate_ids")
     def test_idle_callback_failure(datastore_allocate_ids, in_context):
         def Mutation():
-            path = [entity_pb2.Key.PathElement(kind="SomeKind")]
-            return datastore_pb2.Mutation(
-                upsert=entity_pb2.Entity(key=entity_pb2.Key(path=path))
+            path = [ds_types.Key.PathElement(kind="SomeKind")]
+            return ds_types.Mutation(
+                upsert=ds_types.Entity(key=ds_types.Key(path=path))
             )
 
         mutation1, mutation2 = Mutation(), Mutation()
@@ -1218,47 +1220,47 @@ class Test_process_commit:
 class Test_datastore_commit:
     @staticmethod
     @pytest.mark.usefixtures("in_context")
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
     @mock.patch("google.cloud.ndb._datastore_api.stub")
-    def test_wo_transaction(stub, datastore_pb2):
+    def test_wo_transaction(stub, ds_types):
         mutations = object()
         api = stub.return_value
         future = tasklets.Future()
         future.set_result("response")
-        api.Commit.future.return_value = future
+        api.commit.future.return_value = future
         assert _api._datastore_commit(mutations, None).result() == "response"
 
-        datastore_pb2.CommitRequest.assert_called_once_with(
+        ds_types.CommitRequest.assert_called_once_with(
             project_id="testing",
-            mode=datastore_pb2.CommitRequest.NON_TRANSACTIONAL,
+            mode=ds_types.CommitRequest.Mode.NON_TRANSACTIONAL,
             mutations=mutations,
             transaction=None,
         )
 
-        request = datastore_pb2.CommitRequest.return_value
-        assert api.Commit.future.called_once_with(request)
+        request = ds_types.CommitRequest.return_value
+        assert api.commit.future.called_once_with(request)
 
     @staticmethod
     @pytest.mark.usefixtures("in_context")
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
     @mock.patch("google.cloud.ndb._datastore_api.stub")
-    def test_w_transaction(stub, datastore_pb2):
+    def test_w_transaction(stub, ds_types):
         mutations = object()
         api = stub.return_value
         future = tasklets.Future()
         future.set_result("response")
-        api.Commit.future.return_value = future
+        api.commit.future.return_value = future
         assert _api._datastore_commit(mutations, b"tx123").result() == "response"
 
-        datastore_pb2.CommitRequest.assert_called_once_with(
+        ds_types.CommitRequest.assert_called_once_with(
             project_id="testing",
-            mode=datastore_pb2.CommitRequest.TRANSACTIONAL,
+            mode=ds_types.CommitRequest.Mode.TRANSACTIONAL,
             mutations=mutations,
             transaction=b"tx123",
         )
 
-        request = datastore_pb2.CommitRequest.return_value
-        assert api.Commit.future.called_once_with(request)
+        request = ds_types.CommitRequest.return_value
+        assert api.commit.future.called_once_with(request)
 
 
 @pytest.mark.usefixtures("in_context")
@@ -1332,22 +1334,22 @@ class Test_AllocateIdsBatch:
 
 
 @pytest.mark.usefixtures("in_context")
-@mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+@mock.patch("google.cloud.ndb._datastore_api.ds_types")
 @mock.patch("google.cloud.ndb._datastore_api.stub")
-def test__datastore_allocate_ids(stub, datastore_pb2):
+def test__datastore_allocate_ids(stub, ds_types):
     keys = object()
     api = stub.return_value
     future = tasklets.Future()
     future.set_result("response")
-    api.AllocateIds.future.return_value = future
+    api.allocate_ids.future.return_value = future
     assert _api._datastore_allocate_ids(keys).result() == "response"
 
-    datastore_pb2.AllocateIdsRequest.assert_called_once_with(
+    ds_types.AllocateIdsRequest.assert_called_once_with(
         project_id="testing", keys=keys
     )
 
-    request = datastore_pb2.AllocateIdsRequest.return_value
-    assert api.AllocateIds.future.called_once_with(request)
+    request = ds_types.AllocateIdsRequest.return_value
+    assert api.allocate_ids.future.called_once_with(request)
 
 
 @pytest.mark.usefixtures("in_context")
@@ -1368,49 +1370,49 @@ def test_begin_transaction(_datastore_begin_transaction):
 class Test_datastore_begin_transaction:
     @staticmethod
     @pytest.mark.usefixtures("in_context")
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
     @mock.patch("google.cloud.ndb._datastore_api.stub")
-    def test_read_only(stub, datastore_pb2):
+    def test_read_only(stub, ds_types):
         api = stub.return_value
         future = tasklets.Future()
         future.set_result("response")
-        api.BeginTransaction.future.return_value = future
+        api.begin_transaction.future.return_value = future
         assert _api._datastore_begin_transaction(True).result() == "response"
 
-        datastore_pb2.TransactionOptions.assert_called_once_with(
-            read_only=datastore_pb2.TransactionOptions.ReadOnly()
+        ds_types.TransactionOptions.assert_called_once_with(
+            read_only=ds_types.TransactionOptions.ReadOnly()
         )
 
-        transaction_options = datastore_pb2.TransactionOptions.return_value
-        datastore_pb2.BeginTransactionRequest.assert_called_once_with(
+        transaction_options = ds_types.TransactionOptions.return_value
+        ds_types.BeginTransactionRequest.assert_called_once_with(
             project_id="testing", transaction_options=transaction_options
         )
 
-        request = datastore_pb2.BeginTransactionRequest.return_value
-        assert api.BeginTransaction.future.called_once_with(request)
+        request = ds_types.BeginTransactionRequest.return_value
+        assert api.begin_transaction.future.called_once_with(request)
 
     @staticmethod
     @pytest.mark.usefixtures("in_context")
-    @mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+    @mock.patch("google.cloud.ndb._datastore_api.ds_types")
     @mock.patch("google.cloud.ndb._datastore_api.stub")
-    def test_read_write(stub, datastore_pb2):
+    def test_read_write(stub, ds_types):
         api = stub.return_value
         future = tasklets.Future()
         future.set_result("response")
-        api.BeginTransaction.future.return_value = future
+        api.begin_transaction.future.return_value = future
         assert _api._datastore_begin_transaction(False).result() == "response"
 
-        datastore_pb2.TransactionOptions.assert_called_once_with(
-            read_write=datastore_pb2.TransactionOptions.ReadWrite()
+        ds_types.TransactionOptions.assert_called_once_with(
+            read_write=ds_types.TransactionOptions.ReadWrite()
         )
 
-        transaction_options = datastore_pb2.TransactionOptions.return_value
-        datastore_pb2.BeginTransactionRequest.assert_called_once_with(
+        transaction_options = ds_types.TransactionOptions.return_value
+        ds_types.BeginTransactionRequest.assert_called_once_with(
             project_id="testing", transaction_options=transaction_options
         )
 
-        request = datastore_pb2.BeginTransactionRequest.return_value
-        assert api.BeginTransaction.future.called_once_with(request)
+        request = ds_types.BeginTransactionRequest.return_value
+        assert api.begin_transaction.future.called_once_with(request)
 
 
 @pytest.mark.usefixtures("in_context")
@@ -1427,21 +1429,21 @@ def test_rollback(_datastore_rollback):
 
 
 @pytest.mark.usefixtures("in_context")
-@mock.patch("google.cloud.ndb._datastore_api.datastore_pb2")
+@mock.patch("google.cloud.ndb._datastore_api.ds_types")
 @mock.patch("google.cloud.ndb._datastore_api.stub")
-def test__datastore_rollback(stub, datastore_pb2):
+def test__datastore_rollback(stub, ds_types):
     api = stub.return_value
     future = tasklets.Future()
     future.set_result("response")
-    api.Rollback.future.return_value = future
+    api.rollback.future.return_value = future
     assert _api._datastore_rollback(b"tx123").result() == "response"
 
-    datastore_pb2.RollbackRequest.assert_called_once_with(
+    ds_types.RollbackRequest.assert_called_once_with(
         project_id="testing", transaction=b"tx123"
     )
 
-    request = datastore_pb2.RollbackRequest.return_value
-    assert api.Rollback.future.called_once_with(request)
+    request = ds_types.RollbackRequest.return_value
+    assert api.rollback.future.called_once_with(request)
 
 
 def test__complete():

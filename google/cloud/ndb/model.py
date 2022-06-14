@@ -263,7 +263,7 @@ import pytz
 
 from google.cloud.datastore import entity as ds_entity_module
 from google.cloud.datastore import helpers
-from google.cloud.datastore_v1.proto import entity_pb2
+from google.cloud.datastore_v1 import types as datastore_types
 
 from google.cloud.ndb import _legacy_entity_pb
 from google.cloud.ndb import _datastore_types
@@ -4414,7 +4414,7 @@ class LocalStructuredProperty(BlobProperty):
                 "received {}".format(self._model_class.__name__, value)
             )
         pb = _entity_to_protobuf(value, set_key=self._keep_keys)
-        return pb.SerializePartialToString()
+        return pb._pb.SerializePartialToString()
 
     def _from_base_type(self, value):
         """Convert a value from the "base" value type for this property.
@@ -4425,8 +4425,8 @@ class LocalStructuredProperty(BlobProperty):
             The converted value with given class.
         """
         if isinstance(value, bytes):
-            pb = entity_pb2.Entity()
-            pb.MergeFromString(value)
+            pb = datastore_types.Entity()
+            pb._pb.MergeFromString(value)
             entity_value = helpers.entity_from_protobuf(pb)
             if not entity_value.keys():
                 # No properties. Maybe dealing with legacy pb format.

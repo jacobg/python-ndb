@@ -29,7 +29,6 @@ from google.cloud.datastore import entity as entity_module
 from google.cloud.datastore import key as ds_key_module
 from google.cloud.datastore import helpers
 from google.cloud.datastore_v1 import types as ds_types
-from google.cloud.datastore_v1.proto import entity_pb2
 import pytest
 
 from google.cloud.ndb import _datastore_types
@@ -3635,7 +3634,7 @@ class TestLocalStructuredProperty:
         value = Simple()
         entity = entity_module.Entity()
         pb = helpers.entity_to_protobuf(entity)
-        expected = pb.SerializePartialToString()
+        expected = pb._pb.SerializePartialToString()
         assert prop._to_base_type(value) == expected
 
     @pytest.mark.usefixtures("in_context")
@@ -3665,7 +3664,7 @@ class TestLocalStructuredProperty:
 
         prop = model.LocalStructuredProperty(Simple, name="ent")
         pb = helpers.entity_to_protobuf(entity_module.Entity())
-        value = pb.SerializePartialToString()
+        value = pb._pb.SerializePartialToString()
         expected = Simple()
         assert prop._from_base_type(value) == expected
 
@@ -3730,7 +3729,7 @@ class TestLocalStructuredProperty:
         entity = SomeKind(foo=[SubKind(bar="baz")])
         data = {"_exclude_from_indexes": []}
         protobuf = model._entity_to_protobuf(entity.foo[0], set_key=False)
-        protobuf = protobuf.SerializePartialToString()
+        protobuf = protobuf._pb.SerializePartialToString()
         assert SomeKind.foo._to_datastore(entity, data, repeated=True) == ("foo",)
         assert data.pop("_exclude_from_indexes") == ["foo"]
         assert data == {"foo": [[protobuf]]}
@@ -3877,8 +3876,8 @@ class TestLocalStructuredProperty:
         child = entity._properties["child"]._from_base_type(value)
         assert child.foo == "bar"
 
-        pb = entity_pb2.Entity()
-        pb.MergeFromString(value)
+        pb = ds_types.Entity()
+        pb._pb.MergeFromString(value)
         value = helpers.entity_from_protobuf(pb)
         child = model._entity_from_ds_entity(value, model_class=Base)
         assert child._values["foo"].b_val == "bar"
@@ -4792,13 +4791,13 @@ class TestModel:
     @mock.patch("google.cloud.ndb._datastore_api")
     def test_allocate_ids(_datastore_api):
         completed = [
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=21)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=21)],
             ),
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=42)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=42)],
             ),
         ]
         _datastore_api.allocate.return_value = utils.future_result(completed)
@@ -4825,13 +4824,13 @@ class TestModel:
     @mock.patch("google.cloud.ndb._datastore_api")
     def test_allocate_ids_w_hooks(_datastore_api):
         completed = [
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=21)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=21)],
             ),
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=42)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=42)],
             ),
         ]
         _datastore_api.allocate.return_value = utils.future_result(completed)
@@ -4891,13 +4890,13 @@ class TestModel:
     @mock.patch("google.cloud.ndb._datastore_api")
     def test_allocate_ids_async(_datastore_api):
         completed = [
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=21)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=21)],
             ),
-            entity_pb2.Key(
-                partition_id=entity_pb2.PartitionId(project_id="testing"),
-                path=[entity_pb2.Key.PathElement(kind="Simple", id=42)],
+            ds_types.Key(
+                partition_id=ds_types.PartitionId(project_id="testing"),
+                path=[ds_types.Key.PathElement(kind="Simple", id=42)],
             ),
         ]
         _datastore_api.allocate.return_value = utils.future_result(completed)
